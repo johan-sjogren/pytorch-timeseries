@@ -1,0 +1,7 @@
+# External development packages
+pytest
+pytest-ordering
+flake8
+black
+pre-commit
+python-dotenv
