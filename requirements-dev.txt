@@ -5,3 +5,5 @@ flake8
 black
 pre-commit
 python-dotenv
+jupyterlab
+matplotlib

@@ -1,13 +1,11 @@
 #################################################################################
 # COMMANDS                                                                      #
 #################################################################################
+
+## Create/update conda environment
 .PHONY: env
 env:
-    conda env create -f conda.yaml
-
-.PHONY: init
-init:
-    conda activate pytorch-ts
+	conda env create -f conda.yaml
 
 ## precommit hooks with flak8 and black
 .PHONY: precommit
