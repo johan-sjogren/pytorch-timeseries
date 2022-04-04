@@ -52,9 +52,15 @@ class SeriesDataset(torch.utils.data.Dataset):
         >>> test = [ list(x) for x in zip(range(5), range(5))]
         >>> target = list(range(5, 10))
         >>> ds = SeriesDataset(test, target, horizon=2, lagged_window=1)
-        >>> print(ds.__getitem__(0))
-        {'lagged_numerical_covariates': tensor([[0., 0.]]), 'lagged_targets': tensor([5.]), 'covariates': tensor([[1., 1.],
-        [2., 2.]]), 'target': tensor([6., 7.])}
+        >>> print(ds.__getitem__(0)['lagged_numerical_covariates'])
+        tensor([[0., 0.]])
+        >>> print(ds.__getitem__(0)['lagged_targets'])
+        tensor([5.])
+        >>> print(ds.__getitem__(0)['covariates'])
+        tensor([[1., 1.],
+                [2., 2.]])
+        >>> print(ds.__getitem__(0)['target'])
+        tensor([6., 7.])
         """
         # relative_idx = torch.arange(-self.lagg_window)
         lagged_covariates = self.covariates[index : index + self.lagg_window]
@@ -92,7 +98,9 @@ class SeriesDataset(torch.utils.data.Dataset):
         raise NotImplementedError()
 
 
-if __name__ == "__main__":
-    import doctest
+class GroupedSeriesDS(torch.utils.data.Dataset):
+    pass
 
-    doctest.testmod(optionflags=doctest.NORMALIZE_WHITESPACE)
+
+class HierarchialSeriesDS(torch.utils.data.Dataset):
+    pass

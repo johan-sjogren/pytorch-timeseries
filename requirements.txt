@@ -1,6 +1,7 @@
 torch
 torchvision
 torchaudio
+torchdata
 scikit-learn
 pandas
 numpy
