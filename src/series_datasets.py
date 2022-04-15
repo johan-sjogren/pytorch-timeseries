@@ -3,7 +3,6 @@ import pandas as pd
 
 
 # TODO: Include relative index for the items
-# TODO: split covariates into numerical and categorical
 # TODO: Class which samples the targets
 # TODO: Include data only known prior to forecast
 
@@ -64,58 +63,160 @@ class BaseSeriesDataset(torch.utils.data.Dataset):
         Examples:
         >>> target = list(range(5, 10))
         >>> ds = BaseSeriesDataset(target, horizon=2, lagged_window=1)
-        >>> print(ds.__getitem__(0)['lagged_targets'])
-        tensor([5.])
-        >>> print(ds.__getitem__(0)['targets'])
-        tensor([6., 7.])
+        >>> print(ds.__getitem__(0))
+        (tensor([5.]), tensor([6., 7.]))
         """
+        if index >= len(self):
+            raise IndexError
         # relative_idx = torch.arange(-self.lagg_window)
         lagged_targets = self.target[index : index + self.lagg_window]
         target = self.target[
             index + self.lagg_window : index + self.lagg_window + self.horizon
         ]
-        return {
-            "lagged_targets": lagged_targets,
-            "targets": target,
-        }
+        return lagged_targets, target
 
 
-class SeriesDatasetWithCovariates(BaseSeriesDataset):
+class SeriesWithCovariates(torch.utils.data.Dataset):
     def __init__(self, covariates, target, horizon=1, lagged_window=0, skip_interval=0):
         assert len(covariates) == len(target)
-        self.covariates = torch.Tensor(covariates)
-        super().__init__(target, horizon, lagged_window, skip_interval)
+        self.covariates = BaseSeriesDataset(
+            covariates, horizon, lagged_window, skip_interval
+        )
+        self.targets = BaseSeriesDataset(target, horizon, lagged_window, skip_interval)
+
+    def __len__(self):
+        return len(self.targets)
 
     def __getitem__(self, index):
         """Get item at index
         Examples:
         >>> test = [ list(x) for x in zip(range(5), range(5))]
         >>> target = list(range(5, 10))
-        >>> ds = SeriesDatasetWithCovariates(test, target, horizon=2, lagged_window=1)
-        >>> print(ds.__getitem__(0)['lagged_covariates'])
+        >>> ds = SeriesWithCovariates(test, target, horizon=2, lagged_window=1)
+        >>> print(ds[0]['lagged_covariates'])
         tensor([[0., 0.]])
-        >>> print(ds.__getitem__(0)['lagged_targets'])
+        >>> print(ds[0]['lagged_targets'])
         tensor([5.])
-        >>> print(ds.__getitem__(0)['covariates'])
+        >>> print(ds[0]['covariates'])
         tensor([[1., 1.],
                 [2., 2.]])
-        >>> print(ds.__getitem__(0)['targets'])
+        >>> print(ds[0]['targets'])
+        tensor([6., 7.])
+        """
+        lagged_covariates, covariates = self.covariates[index]
+        lagged_targets, target = self.targets[index]
+        return {
+            "lagged_covariates": lagged_covariates,
+            "covariates": covariates,
+            "lagged_targets": lagged_targets,
+            "targets": target,
+        }
+
+    @classmethod
+    def from_dataframe(df, covariate_cols, target_cols):
+        raise NotImplementedError()
+
+
+class SeriesWithCategoricals(BaseSeriesDataset):
+    def __init__(
+        self,
+        num_covariates,
+        cat_covariates,
+        target,
+        horizon=1,
+        lagged_window=0,
+        skip_interval=0,
+    ):
+        assert len(num_covariates) == len(target)
+        assert len(cat_covariates) == len(target)
+        self.num_covariates = BaseSeriesDataset(
+            num_covariates, horizon, lagged_window, skip_interval
+        )
+        self.cat_covariates = BaseSeriesDataset(
+            cat_covariates, horizon, lagged_window, skip_interval
+        )
+        self.targets = BaseSeriesDataset(target, horizon, lagged_window, skip_interval)
+
+    def __len__(self):
+        return len(self.targets)
+
+    def __getitem__(self, index):
+        """Get item at index
+        Examples:
+        >>> test = [ list(x) for x in zip(range(5), range(5))]
+        >>> cats = [ list(x) for x in zip(range(5,10), range(6, 11))]
+        >>> target = list(range(5, 10))
+        >>> ds = SeriesWithCategoricals(test, cats, target, horizon=2, lagged_window=1)
+        >>> print(ds.__getitem__(0)['lagged_categorical_covariates'])
+        tensor([[5., 6.]])
+        >>> print(ds[0]['lagged_numerical_covariates'])
+        tensor([[0., 0.]])
+        >>> print(ds[0]['lagged_targets'])
+        tensor([5.])
+        >>> print(ds[0]['categorical_covariates'])
+        tensor([[6., 7.],
+                [7., 8.]])
+        >>> print(ds[0]['numerical_covariates'])
+        tensor([[1., 1.],
+                [2., 2.]])
+        >>> print(ds[0]['targets'])
         tensor([6., 7.])
         """
 
-        # relative_idx = torch.arange(-self.lagg_window)
-        lagged_covariates = self.covariates[index : index + self.lagg_window]
-        covariates = self.covariates[
-            index + self.lagg_window : index + self.lagg_window + self.horizon
-        ]
-        return_dict = super().__getitem__(index)
-        return_dict.update(
-            {
-                "lagged_covariates": lagged_covariates,
-                "covariates": covariates,
+        lagged_cat_covariates, cat_covariates = self.cat_covariates[index]
+        lagged_num_covariates, num_covariates = self.num_covariates[index]
+        lagged_targets, target = self.targets[index]
+        return {
+            "lagged_categorical_covariates": lagged_cat_covariates,
+            "categorical_covariates": cat_covariates,
+            "lagged_numerical_covariates": lagged_num_covariates,
+            "numerical_covariates": num_covariates,
+            "lagged_targets": lagged_targets,
+            "targets": target,
+        }
+
+    @classmethod
+    def from_dataframe(df, covariate_cols, target_cols):
+        raise NotImplementedError()
+
+
+class GroupedSeriesDS(torch.utils.data.Dataset):
+    def __init__(
+        self, group_dict, dataset_type, horizon=1, lagged_window=0, skip_interval=0
+    ):
+        """
+        >>> group_dict = {'a':[list(range(5))], 'b': [list(range(5, 10))]}
+        >>> ds = GroupedSeriesDS(group_dict, BaseSeriesDataset, horizon=2, lagged_window=1)
+        >>> len(ds)
+        6
+        >>> ds.group_dict['b'][0]
+        (tensor([5.]), tensor([6., 7.]))
+        >>> ds[3]
+        (tensor([5.]), tensor([6., 7.]))
+        >>> ds[0]
+        (tensor([0.]), tensor([1., 2.]))
+        """
+        self.group_dict = {}
+        self.idx_dict = {}
+        _idx = 0
+        for group, data in group_dict.items():
+            self.group_dict[group] = dataset_type(
+                *data, horizon, lagged_window, skip_interval
+            )
+            temp_dict = {
+                idx: (_idx, group)
+                for idx in range(_idx, _idx + len(self.group_dict[group]))
             }
-        )
-        return return_dict
+            _idx += len(self.group_dict[group])
+            self.idx_dict.update(temp_dict)
+        self.idx_max = _idx
+
+    def __len__(self):
+        return self.idx_max
+
+    def __getitem__(self, index):
+        idx, group = self.idx_dict[index]
+        return self.group_dict[group][index - idx]
 
     @classmethod
     def from_dataframe(df, covariate_cols, target_cols):
@@ -134,10 +235,6 @@ class TimeSeriesDataset(BaseSeriesDataset):
     ):
         assert len(cat_covariates) == len(target)
         super().__init__(num_covariates, target, horizon, lagged_window, skip_interval)
-
-
-class GroupedSeriesDS(torch.utils.data.Dataset):
-    pass
 
 
 class HierarchialSeriesDS(torch.utils.data.Dataset):
