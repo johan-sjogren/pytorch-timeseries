@@ -5,3 +5,5 @@ torchdata
 scikit-learn
 pandas
 numpy
+pyarrow
+torcharrow
