@@ -37,8 +37,10 @@ class DummyData:
 
 
 class BaseSeriesDataset(torch.utils.data.Dataset):
-    def __init__(self, target, horizon=1, lagged_window=0, skip_interval=0):
-        self.target = torch.Tensor(target)
+    def __init__(
+        self, target, horizon=1, lagged_window=0, skip_interval=0, dtype=torch.float64
+    ):
+        self.target = torch.Tensor(target).to(dtype)
         self.lagg_window = lagged_window
         self.horizon = horizon
         self.skip_interval = skip_interval
@@ -73,11 +75,11 @@ class BaseSeriesDataset(torch.utils.data.Dataset):
         target = self.target[
             index + self.lagg_window : index + self.lagg_window + self.horizon
         ]
-        return lagged_targets, target
+        return target, lagged_targets
 
 
 class SeriesWithCovariates(torch.utils.data.Dataset):
-    def __init__(self, covariates, target, horizon=1, lagged_window=0, skip_interval=0):
+    def __init__(self, target, covariates, horizon=1, lagged_window=0, skip_interval=0):
         assert len(covariates) == len(target)
         self.covariates = BaseSeriesDataset(
             covariates, horizon, lagged_window, skip_interval
@@ -92,7 +94,7 @@ class SeriesWithCovariates(torch.utils.data.Dataset):
         Examples:
         >>> test = [ list(x) for x in zip(range(5), range(5))]
         >>> target = list(range(5, 10))
-        >>> ds = SeriesWithCovariates(test, target, horizon=2, lagged_window=1)
+        >>> ds = SeriesWithCovariates(target, test, horizon=2, lagged_window=1)
         >>> print(ds[0]['lagged_covariates'])
         tensor([[0., 0.]])
         >>> print(ds[0]['lagged_targets'])
@@ -103,8 +105,8 @@ class SeriesWithCovariates(torch.utils.data.Dataset):
         >>> print(ds[0]['targets'])
         tensor([6., 7.])
         """
-        lagged_covariates, covariates = self.covariates[index]
-        lagged_targets, target = self.targets[index]
+        covariates, lagged_covariates = self.covariates[index]
+        target, lagged_targets = self.targets[index]
         return {
             "lagged_covariates": lagged_covariates,
             "covariates": covariates,
@@ -113,16 +115,16 @@ class SeriesWithCovariates(torch.utils.data.Dataset):
         }
 
     @classmethod
-    def from_dataframe(df, covariate_cols, target_cols):
+    def from_dataframe(cls, df, covariate_cols, target_cols):
         raise NotImplementedError()
 
 
 class SeriesWithCategoricals(BaseSeriesDataset):
     def __init__(
         self,
+        target,
         num_covariates,
         cat_covariates,
-        target,
         horizon=1,
         lagged_window=0,
         skip_interval=0,
@@ -133,7 +135,7 @@ class SeriesWithCategoricals(BaseSeriesDataset):
             num_covariates, horizon, lagged_window, skip_interval
         )
         self.cat_covariates = BaseSeriesDataset(
-            cat_covariates, horizon, lagged_window, skip_interval
+            cat_covariates, horizon, lagged_window, skip_interval, dtype=torch.int64
         )
         self.targets = BaseSeriesDataset(target, horizon, lagged_window, skip_interval)
 
@@ -146,7 +148,7 @@ class SeriesWithCategoricals(BaseSeriesDataset):
         >>> test = [ list(x) for x in zip(range(5), range(5))]
         >>> cats = [ list(x) for x in zip(range(5,10), range(6, 11))]
         >>> target = list(range(5, 10))
-        >>> ds = SeriesWithCategoricals(test, cats, target, horizon=2, lagged_window=1)
+        >>> ds = SeriesWithCategoricals(target, test, cats, horizon=2, lagged_window=1)
         >>> print(ds.__getitem__(0)['lagged_categorical_covariates'])
         tensor([[5., 6.]])
         >>> print(ds[0]['lagged_numerical_covariates'])
@@ -163,9 +165,9 @@ class SeriesWithCategoricals(BaseSeriesDataset):
         tensor([6., 7.])
         """
 
-        lagged_cat_covariates, cat_covariates = self.cat_covariates[index]
-        lagged_num_covariates, num_covariates = self.num_covariates[index]
-        lagged_targets, target = self.targets[index]
+        cat_covariates, lagged_cat_covariates = self.cat_covariates[index]
+        num_covariates, lagged_num_covariates = self.num_covariates[index]
+        target, lagged_targets = self.targets[index]
         return {
             "lagged_categorical_covariates": lagged_cat_covariates,
             "categorical_covariates": cat_covariates,
@@ -176,7 +178,7 @@ class SeriesWithCategoricals(BaseSeriesDataset):
         }
 
     @classmethod
-    def from_dataframe(df, covariate_cols, target_cols):
+    def from_dataframe(cls, df, covariate_cols, target_cols):
         raise NotImplementedError()
 
 
@@ -219,8 +221,51 @@ class GroupedSeriesDS(torch.utils.data.Dataset):
         return self.group_dict[group][index - idx]
 
     @classmethod
-    def from_dataframe(df, covariate_cols, target_cols):
-        raise NotImplementedError()
+    def from_dataframe(
+        cls,
+        df,
+        group_cols,
+        target_cols,
+        num_covariate_cols=None,
+        cat_covariate_cols=None,
+        keep_groups=False,
+        **kwargs
+    ):
+        grouped = df.groupby(group_cols, as_index=not keep_groups)
+
+        if keep_groups:
+            if cat_covariate_cols:
+                cat_covariate_cols += group_cols
+            else:
+                cat_covariate_cols = group_cols
+
+        group_dict = {}
+        if (num_covariate_cols is None) and (cat_covariate_cols is None):
+            for group, data in grouped:
+                group_dict[group] = [data[target_cols].values]
+            return cls(group_dict, BaseSeriesDataset, **kwargs)
+        elif num_covariate_cols is None:
+            for group, data in grouped:
+                group_dict[group] = [
+                    data[target_cols].values,
+                    data[cat_covariate_cols].values,
+                ]
+            return cls(group_dict, SeriesWithCovariates, **kwargs)
+        elif cat_covariate_cols is None:
+            for group, data in grouped:
+                group_dict[group] = [
+                    data[target_cols].values,
+                    data[num_covariate_cols].values,
+                ]
+            return cls(group_dict, SeriesWithCovariates, **kwargs)
+        else:
+            for group, data in grouped:
+                group_dict[group] = [
+                    data[target_cols].values,
+                    data[num_covariate_cols].values,
+                    data[cat_covariate_cols].values,
+                ]
+            return cls(group_dict, SeriesWithCategoricals, **kwargs)
 
 
 class TimeSeriesDataset(BaseSeriesDataset):
