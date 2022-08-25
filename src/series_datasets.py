@@ -7,35 +7,6 @@ import pandas as pd
 # TODO: Include data only known prior to forecast
 
 
-class DummyData:
-    time_col = "order_date"
-    prediction_groups = ["groupa", "groupb"]
-    targets = ["pred1", "pred2"]
-
-    def get_group_data(self, start_date=None, end_date=None):
-        columns = [self.time_col] + self.prediction_groups + self.targets
-        data = [
-            ["2021-10-10", "A", "1", 0.1, 0.2],
-            ["2021-10-11", "A", "1", 0.2, 0.3],
-            ["2021-10-10", "A", "2", 0.2, 0.3],
-            ["2021-10-11", "A", "2", 0.1, 0.2],
-            ["2021-10-11", "B", "2", 0.2, 0.3],
-            ["2021-10-10", "B", "2", 0.2, 0.3],
-        ]
-        fc = pd.DataFrame(columns=columns, data=data)
-        return fc
-
-    def get__data(self, start_date=None, end_date=None):
-        columns = [self.time_col] + self.prediction_groups + self.targets
-        data = [
-            ["2021-10-10", "A", "1", 0.1, 0.2],
-            ["2021-10-11", "A", "1", 0.2, 0.3],
-            ["2021-10-13", "A", "1", 0.1, 0.2],
-        ]
-        fc = pd.DataFrame(columns=columns, data=data)
-        return fc
-
-
 class BaseSeriesDataset(torch.utils.data.Dataset):
     def __init__(
         self, target, horizon=1, lagged_window=0, skip_interval=0, dtype=torch.float64
@@ -284,3 +255,33 @@ class TimeSeriesDataset(BaseSeriesDataset):
 
 class HierarchialSeriesDS(torch.utils.data.Dataset):
     pass
+
+
+class DummyData:
+    time_col = "order_date"
+    prediction_groups = ["groupa", "groupb"]
+    targets = ["pred1", "pred2"]
+
+    def get_group_data(self, start_date=None, end_date=None):
+        columns = [self.time_col] + self.prediction_groups + self.targets
+        data = [
+            ["2021-10-10", "A", "1", 0.1, 0.2],
+            ["2021-10-11", "A", "1", 0.2, 0.3],
+            ["2021-10-10", "A", "2", 0.2, 0.3],
+            ["2021-10-11", "A", "2", 0.1, 0.2],
+            ["2021-10-11", "B", "2", 0.2, 0.3],
+            ["2021-10-10", "B", "2", 0.2, 0.3],
+        ]
+        fc = pd.DataFrame(columns=columns, data=data)
+        return fc
+
+    def get__data(self, start_date=None, end_date=None):
+        columns = [self.time_col] + self.prediction_groups + self.targets
+        data = [
+            ["2021-10-10", "A", "1", 0.1, 0.2],
+            ["2021-10-11", "A", "1", 0.2, 0.3],
+            ["2021-10-13", "A", "1", 0.1, 0.2],
+        ]
+        fc = pd.DataFrame(columns=columns, data=data)
+        return fc
+
